@@ -1,4 +1,5 @@
-import React, { Component } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useMountedState } from 'react-use';
 import SearchService from './SearchService';
 import ImageFinderAPI from '../ImageFinderAPI';
 import ImageGallery from './ImageGallery';
@@ -10,80 +11,73 @@ import imageNotFaund from '../images/400error.jpg';
 
 const { IDLE, RESOLVED, RESJECTED, PENDING } = status;
 
-class App extends Component {
-  static defaultProps = {
-    state: {
-      query: '',
-      page: 1,
-      totalPages: 0,
-      images: [],
-      status: IDLE,
-    },
-  };
-  state = this.props.state;
+const App = () => {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [images, setImages] = useState([]);
+  const [status, setStatus] = useState(IDLE);
+  const isMounted = useMountedState();
 
-  async componentDidUpdate(_, prevState) {
-    const prevQuery = prevState.query;
-    const { query } = this.state;
-    if (query !== prevQuery) {
-      this.getImagesData();
-    }
-    if (this.state.page > 2) {
-      window.scrollTo({
-        top: document.documentElement.scrollHeight,
-        behavior: 'smooth',
-      });
-    }
-  }
-  getImagesData = async () => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const getImagesData = useCallback(async () => {
     try {
-      this.setState({ status: PENDING });
-      const { query, page } = this.state;
+      setStatus(PENDING);
       const response = await ImageFinderAPI(query, page);
       const { totalPages, images } = response;
       if (totalPages < 1) {
-        this.setState({ status: RESJECTED });
-        return;
+        return setStatus(RESJECTED);
       }
-
-      this.setState(prevState => {
-        return {
-          images: [...prevState.images, ...images],
-          page: prevState.page + 1,
-          totalPages,
-          status: RESOLVED,
-        };
-      });
+      setImages(prevImages => [...prevImages, ...images]);
+      setTotalPages(totalPages);
+      setStatus(RESOLVED);
     } catch {
-      this.setState({ status: RESJECTED });
+      setStatus(RESJECTED);
+    }
+  });
+
+  useEffect(() => {
+    if (!query) {
+      return;
+    }
+    getImagesData();
+  }, [getImagesData, query]);
+
+  useEffect(() => {
+    if (isMounted()) {
+      getImagesData();
+
+      if (page > 1) {
+        window.scrollTo({
+          top: document.documentElement.scrollHeight,
+          behavior: 'smooth',
+        });
+      }
+    }
+  }, [getImagesData, page, isMounted]);
+
+  const handleFormSubmit = newQuery => {
+    if (newQuery !== query) {
+      setQuery(newQuery);
+      setPage(1);
+      setImages([]);
     }
   };
-  handleFormSubmit = query => {
-    if (query !== this.state.query) {
-      this.setState(() => {
-        return { query, page: 1, images: [] };
-      });
-    }
-  };
-  handleLoadMore = () => {
-    this.getImagesData();
+  const handleLoadMore = () => {
+    setTotalPages(prevPage => prevPage + 1);
   };
 
-  render() {
-    const { images, status, totalPages, page } = this.state;
+  return (
+    <SearchService onSubmit={handleFormSubmit}>
+      <ImageGallery images={images} />
 
-    return (
-      <SearchService onSubmit={this.handleFormSubmit}>
-        <ImageGallery images={images} />
-
-        {status === PENDING && <Loader />}
-        {status === RESOLVED && page <= totalPages && (
-          <Button onClick={this.handleLoadMore} />
-        )}
-        {status === RESJECTED && <NotFaundMassage image={imageNotFaund} />}
-      </SearchService>
-    );
-  }
-}
+      {status === PENDING && <Loader />}
+      {status === RESOLVED && page <= totalPages && (
+        <Button onClick={handleLoadMore} />
+      )}
+      {status === RESJECTED && <NotFaundMassage image={imageNotFaund} />}
+    </SearchService>
+  );
+};
 
 export default App;
