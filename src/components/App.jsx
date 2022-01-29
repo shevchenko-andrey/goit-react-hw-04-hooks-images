@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import SearchService from './SearchService';
 import ImageFinderAPI from '../ImageFinderAPI';
 import ImageGallery from './ImageGallery';
@@ -16,33 +16,42 @@ const App = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [images, setImages] = useState([]);
   const [status, setStatus] = useState(IDLE);
-
+  const isMounted = useRef(false);
   useEffect(() => {
     if (!query) {
       return;
     }
-    document.title = `Search: ${query}`;
-    getImagesData();
-  }, [query]);
+    if (!isMounted.current) {
+      document.title = `Search: ${query}`;
+      const getImagesData = async () => {
+        try {
+          setStatus(PENDING);
+          const response = await ImageFinderAPI(query, page);
+          const { totalPages, images } = response;
 
-  const getImagesData = async () => {
-    try {
-      setStatus(PENDING);
-      const response = await ImageFinderAPI(query, page);
-      const { totalPages, images } = response;
+          if (totalPages < 1) {
+            return setStatus(RESJECTED);
+          }
 
-      if (totalPages < 1) {
-        return setStatus(RESJECTED);
+          setImages(prevImages => [...prevImages, ...images]);
+          setTotalPages(totalPages);
+          setStatus(RESOLVED);
+        } catch {
+          setStatus(RESJECTED);
+        }
+      };
+      getImagesData();
+      if (page > 1) {
+        setTimeout(() => {
+          window.scrollTo({
+            top: document.documentElement.scrollHeight,
+            behavior: 'smooth',
+          });
+        }, 1000);
       }
-
-      setImages(prevImages => [...prevImages, ...images]);
-      setPage(prevPage => prevPage + 1);
-      setTotalPages(totalPages);
-      setStatus(RESOLVED);
-    } catch {
-      setStatus(RESJECTED);
     }
-  };
+    isMounted.current = false;
+  }, [query, page]);
 
   const handleFormSubmit = newQuery => {
     if (newQuery !== query) {
@@ -51,20 +60,9 @@ const App = () => {
       setImages([]);
     }
   };
-  const handleScrollToBotton = () => {
-    if (page > 1) {
-      setTimeout(() => {
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: 'smooth',
-        });
-      }, 1000);
-    }
-  };
 
   const handleLoadMore = () => {
-    getImagesData();
-    handleScrollToBotton();
+    setPage(prevPage => prevPage + 1);
   };
 
   return (
