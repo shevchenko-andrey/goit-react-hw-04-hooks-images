@@ -15,6 +15,9 @@ const Searchbar = ({ onSubmit }) => {
   };
   const submitForm = e => {
     e.preventDefault();
+    if (!query) {
+      return;
+    }
     onSubmit(query);
   };
 
